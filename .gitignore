@@ -1,0 +1,11 @@
+
+__pycache__/
+*.py[cod]
+.venv/
+.ipynb_checkpoints/
+.DS_Store
+.vscode/
+
+# Local dataset and database
+data/*.csv
+olist_project.db
