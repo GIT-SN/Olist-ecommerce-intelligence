@@ -7,5 +7,5 @@ __pycache__/
 .vscode/
 
 # Local dataset and database
-data/*.csv
+
 olist_project.db

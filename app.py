@@ -29,9 +29,7 @@ if (PROJECT_DATA_DIR / "olist_orders_dataset.csv").exists():
 else:
     DEFAULT_DATA_DIR = LOCAL_DATA_DIR
 
-DATA_DIR = Path(
-    os.getenv("OLIST_DATA_DIR", str(DEFAULT_DATA_DIR))
-)
+DATA_DIR = Path(__file__).resolve().parent / "data"
 
 ORDERS_FILE = DATA_DIR / "olist_orders_dataset.csv"
 ITEMS_FILE = DATA_DIR / "olist_order_items_dataset.csv"
