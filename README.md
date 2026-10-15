@@ -1,126 +1,129 @@
-# Olist E-commerce Intelligence & Late-Delivery Risk Prediction
+# Olist E-commerce Intelligence & Late Delivery Risk Prediction
 
-An end-to-end Data Science project that analyzes e-commerce delivery performance, identifies patterns associated with late deliveries, and demonstrates an ML-based late-delivery risk scoring application using Streamlit.
+An end-to-end Data Science project that analyzes e-commerce order and delivery data, identifies delivery trends, and predicts potential late-delivery risks using Machine Learning.
 
-## Project Overview
+## Live Dashboard
 
-Late deliveries can negatively affect customer experience and satisfaction. This project uses the public Olist Brazilian e-commerce dataset to investigate historical delivery performance and explore whether order-time information can help identify potentially late deliveries.
+**[Open the Streamlit Dashboard](https://olist-ecommerce-intelligence-nh7dwm34qmmnsjue5h2cek.streamlit.app/)**
 
-The project combines SQL analytics, exploratory data analysis, statistical testing, machine learning, and an interactive dashboard.
+## Project Objectives
 
-## Key Features
-
-- Delivery KPIs and monthly performance trends
-- SQL-based analysis using SQLite, including CTEs and window functions
-- Product-category delivery analysis
-- Statistical comparison of customer review scores for late versus on-time deliveries
-- Logistic Regression and Random Forest model comparison
-- Chronological train, validation, and test split
-- Threshold analysis using precision, recall, and F1-score
-- Interactive Streamlit dashboard with a late-delivery risk predictor
+- Analyze e-commerce order and delivery performance.
+- Identify trends in late deliveries over time.
+- Explore order, product, seller, and customer-related patterns.
+- Build a machine learning model to identify orders at risk of late delivery.
+- Present business insights through an interactive dashboard.
 
 ## Tech Stack
 
 - **Language:** Python
-- **Data analysis:** Pandas, NumPy
-- **Database:** SQLite
-- **Visualization:** Plotly, Matplotlib, Seaborn
-- **Statistics:** SciPy
-- **Machine learning:** Scikit-learn
-- **Application:** Streamlit
-- **Model persistence:** Joblib
-- **Environment:** Jupyter Notebook, VS Code
+- **Data Analysis:** Pandas, NumPy
+- **Machine Learning:** Scikit-learn, Logistic Regression
+- **Visualization:** Plotly
+- **Dashboard:** Streamlit
+- **Model Persistence:** Joblib
 
-## Dataset
+## Machine Learning
 
-This project uses the public Olist Brazilian e-commerce dataset.
+The project uses a Logistic Regression classification pipeline with numerical preprocessing, categorical encoding, and a decision threshold selected using validation data.
 
-The model is trained on delivered orders with known actual and estimated delivery dates. Therefore, its target is whether an eligible, eventually delivered order arrived later than its estimated delivery date.
+### Test Results
 
-This is a retrospective prediction exercise; the dataset does not represent every order that could be at risk at the moment of purchase.
+| Metric | Score |
+|---|---:|
+| Average Precision | 0.1122 |
+| ROC-AUC | 0.6583 |
+| Precision | 0.0917 |
+| Recall | 0.2560 |
+| F1-score | 0.1351 |
+| Decision Threshold | 0.67 |
 
-## Machine Learning Results
-
-The models were evaluated using a chronological split to better reflect prediction on future orders.
-
-### Logistic Regression
-
-- Validation Average Precision: **0.1320**
-- Validation ROC-AUC: **0.7456**
-- Validation F1-score at the selected threshold: **0.2278**
-- Test Average Precision: **0.1122**
-- Test ROC-AUC: **0.6583**
-- Test precision at the selected threshold: **0.0917**
-- Test recall at the selected threshold: **0.2560**
-- Test F1-score at the selected threshold: **0.1351**
-
-### Random Forest
-
-- Validation Average Precision: **0.1363**
-- Validation ROC-AUC: **0.7056**
-- Validation F1-score at the best tested threshold: **0.2073**
-
-Logistic Regression was selected provisionally because it achieved better validation ROC-AUC and F1-score. Its test results show that performance declined on later data, so the predictor should be considered experimental rather than production-ready.
-
-## Statistical Analysis
-
-Review scores were compared between late and on-time/early delivered orders at the order level.
-
-- Mean review score for on-time/early orders: **4.294**
-- Mean review score for late orders: **2.567**
-- Mean difference (late minus on-time): **-1.728**
-- 95% bootstrap confidence interval: **[-1.767, -1.690]**
-- Cliff's delta: **-0.554**
-
-These results indicate a strong association between late delivery and lower review scores. They do not establish causation. Review scores were excluded from model features because they are not available at order placement.
+The test set contains approximately **6.61% late deliveries**. The model is experimental: its precision is limited, so its predictions should be treated as risk signals for further investigation rather than definitive delivery forecasts.
 
 ## Project Structure
 
 ```text
 Olist Project/
+├── data/
+│   ├── olist_orders_dataset.csv
+│   ├── olist_order_items_dataset.csv
+│   ├── olist_products_dataset.csv
+│   └── olist_customers_dataset.csv
 ├── app.py
+├── train.py
+├── Olist_Analysis.ipynb
+├── insight.ipynb
 ├── late_delivery_model.joblib
 ├── requirements.txt
-├── README.md
-└── Olist_Analysis.ipynb
+├── .gitignore
+└── README.md
 ```
 
-The notebook filename above is illustrative; replace it with the actual filename in your project folder.
+## Getting Started
 
-## Setup and Run
+### 1. Clone the repository
 
-1. Install Python 3.11 or a compatible Python version.
-2. Clone or download the project.
-3. Install dependencies:
+```bash
+git clone https://github.com/GIT-SN/Olist-ecommerce-intelligence.git
+cd Olist-ecommerce-intelligence
+```
 
-   ```bash
-   python -m pip install -r requirements.txt
-   ```
+### 2. Create and activate a virtual environment
 
-4. Place the required Olist CSV files in the configured dataset directory, or update the dataset path in `app.py`.
-5. Ensure `late_delivery_model.joblib` is in the same folder as `app.py`.
-6. Launch the application:
+**Windows — Git Bash:**
 
-   ```bash
-   python -m streamlit run app.py
-   ```
+```bash
+python -m venv .venv
+source .venv/Scripts/activate
+```
+
+### 3. Install dependencies
+
+```bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 4. Prepare the dataset
+
+Place the four required CSV files inside the `data/` directory. Obtain the dataset from its original source and ensure the filenames match those expected by `train.py`.
+
+### 5. Run the dashboard
+
+```bash
+streamlit run app.py
+```
+
+### 6. Retrain the model
+
+```bash
+python train.py
+```
+
+The training script rebuilds the dataset features, uses chronological train/validation/test splits, evaluates the Logistic Regression model, and saves the trained artifact as `late_delivery_model.joblib`.
+
+## Reproducibility
+
+- Dependency versions are pinned in `requirements.txt`.
+- `train.py` provides a repeatable model-training workflow.
+- The data directory defaults to `data/`.
+- To use a different dataset directory, set the `OLIST_DATA_DIR` environment variable to that directory before running the training script.
 
 ## Limitations
 
-- The model is trained only on eligible orders that were eventually delivered.
-- Test performance is modest and shows a decline from validation performance.
-- The risk score is not calibrated as a real-world probability.
-- Historical relationships do not establish causal explanations for late delivery.
-- The current application is a learning and analytical prototype, not a production delivery-alert system.
+- Model performance is modest, particularly precision.
+- Historical relationships may not generalize to future orders.
+- Predictions depend on the available features and the quality of the input data.
+- The dashboard and model should be considered an analytical project, not a production delivery guarantee.
 
 ## Future Improvements
 
-- Improve temporal generalization and investigate distribution shift.
-- Evaluate probability calibration and business-specific alert thresholds.
-- Add seller and geographic insights while preventing data leakage.
-- Improve automated data-path configuration and application testing.
-- Deploy the dashboard and document reproducible experiments.
+- Engineer additional seller, product, and shipping features.
+- Investigate performance changes across different time periods.
+- Improve precision and risk ranking through further validation.
+- Add SQL-based business analysis.
+- Expand monitoring and model evaluation.
 
-## Data Source
+---
 
-The dataset is publicly available through the Olist Brazilian e-commerce dataset on Kaggle. This project is an independent analysis and is not affiliated with Olist.
+**Disclaimer:** This is an independent portfolio project for educational and analytical purposes.
