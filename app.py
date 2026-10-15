@@ -17,23 +17,21 @@ st.set_page_config(
 st.title("📦 Olist E-commerce Intelligence")
 st.caption("Delivery Performance & Late-Delivery Risk Analysis")
 
+
+
 # -----------------------------
 # 2. Dataset paths
 # -----------------------------
 PROJECT_DIR = Path(__file__).resolve().parent
-LOCAL_DATA_DIR = Path(r"C:\Users\KISHAN PANWAR\Downloads\archive")
-PROJECT_DATA_DIR = PROJECT_DIR / "data"
 
-if (PROJECT_DATA_DIR / "olist_orders_dataset.csv").exists():
-    DEFAULT_DATA_DIR = PROJECT_DATA_DIR
-else:
-    DEFAULT_DATA_DIR = LOCAL_DATA_DIR
-
-DATA_DIR = Path(__file__).resolve().parent / "data"
+DATA_DIR = Path(
+    os.getenv("OLIST_DATA_DIR", str(PROJECT_DIR / "data"))
+).expanduser().resolve()
 
 ORDERS_FILE = DATA_DIR / "olist_orders_dataset.csv"
 ITEMS_FILE = DATA_DIR / "olist_order_items_dataset.csv"
 PRODUCTS_FILE = DATA_DIR / "olist_products_dataset.csv"
+
 
 # -----------------------------
 # 3. Load data
@@ -113,19 +111,24 @@ def load_data():
         category_summary["eligible_orders"] >= 100
     ].sort_values("late_rate", ascending=False)
 
-    return eligible, monthly_summary, category_summary
+    return eligible, monthly_summary, category_summary, order_category
 
 
 # -----------------------------
 # 4. Load with error handling
 # -----------------------------
 try:
-    eligible, monthly_summary, category_summary = load_data()
+    eligible, monthly_summary, category_summary, order_category = load_data()
+
 except Exception as e:
     st.error(f"Could not load the dataset: {e}")
+
     st.info(
-        "Check that the CSV files exist in your Downloads/archive folder."
+        "Ensure the required Olist CSV files are present "
+        "in the configured data directory."
     )
+
+
     st.stop()
 
 # -----------------------------
@@ -164,6 +167,8 @@ filtered["month"] = (
 filtered = filtered[
     filtered["month"].isin(selected_months)
 ]
+
+
 
 
 # -----------------------------
@@ -272,37 +277,74 @@ else:
 
 
 
+
 # -----------------------------
 # 8. Category-level insights
 # -----------------------------
-st.subheader("Product Categories with Higher Late-Delivery Rates")
 
-if not category_summary.empty:
+# -----------------------------
+# 8. Category-level insights
+# -----------------------------
+
+# -----------------------------
+# 8. Category-level insights
+# -----------------------------
+st.subheader("Category-level Late-Delivery Insights")
+
+# Recalculate category metrics using the selected date range
+category_summary_filtered = (
+    filtered[["order_id", "late_delivery"]]
+    .merge(order_category, on="order_id", how="inner")
+    .drop_duplicates(["order_id", "product_category_name"])
+)
+
+category_summary_filtered["product_category_name"] = (
+    category_summary_filtered["product_category_name"].fillna("unknown")
+)
+
+category_summary_filtered = (
+    category_summary_filtered
+    .groupby("product_category_name")
+    .agg(
+        eligible_orders=("order_id", "nunique"),
+        late_orders=("late_delivery", "sum"),
+        late_rate=("late_delivery", "mean")
+    )
+    .reset_index()
+)
+
+category_summary_filtered = category_summary_filtered[
+    category_summary_filtered["eligible_orders"] >= 100
+].sort_values("late_rate", ascending=False)
+
+# Display category results
+if not category_summary_filtered.empty:
+    category_summary_filtered["late_rate_pct"] = (
+        category_summary_filtered["late_rate"] * 100
+    )
+
     top_n = st.slider(
         "Number of categories to display",
         min_value=5,
-        max_value=min(20, len(category_summary)),
-        value=min(10, len(category_summary))
+        max_value=min(20, len(category_summary_filtered)),
+        value=min(10, len(category_summary_filtered))
     )
 
-    top_categories = category_summary.head(top_n).copy()
-    top_categories["late_rate_pct"] = top_categories["late_rate"] * 100
+    top_categories = category_summary_filtered.head(top_n)
 
     fig_category = px.bar(
-        top_categories.sort_values("late_rate_pct"),
-        x="late_rate_pct",
-        y="product_category_name",
-        orientation="h",
-        hover_data=["eligible_orders", "late_orders"],
-        title="Highest Late-Delivery Rates (Minimum 100 Orders)",
+        top_categories,
+        x="product_category_name",
+        y="late_rate_pct",
+        title="Late-Delivery Rate by Product Category",
         labels={
-            "late_rate_pct": "Late-Delivery Rate (%)",
             "product_category_name": "Product Category",
-            "eligible_orders": "Eligible Orders",
-            "late_orders": "Late Orders"
-        }
+            "late_rate_pct": "Late-Delivery Rate (%)"
+        },
+        hover_data=["eligible_orders", "late_orders"]
     )
 
+    fig_category.update_layout(xaxis_tickangle=-45)
     st.plotly_chart(fig_category, use_container_width=True)
 
     st.dataframe(
@@ -313,22 +355,17 @@ if not category_summary.empty:
                 "late_orders",
                 "late_rate_pct"
             ]
-        ].rename(columns={
-            "product_category_name": "Category",
-            "eligible_orders": "Eligible Orders",
-            "late_orders": "Late Orders",
-            "late_rate_pct": "Late Rate (%)"
-        }).round(2),
+        ],
         use_container_width=True,
         hide_index=True
     )
+else:
+    st.info(
+        "No categories have at least 100 eligible orders "
+        "in the selected month range. Try selecting more months."
+    )
 
-st.caption(
-    "Dataset: public Olist Brazilian e-commerce dataset. "
-    "Late-delivery analysis includes delivered orders with known actual "
-    "and estimated delivery dates. Category counts can overlap when an "
-    "order contains products from multiple categories."
-)
+
 
 
 
@@ -437,7 +474,7 @@ else:
                 options=list(range(1, 13)),
                 index=5
             )
-            
+
             main_category = st.selectbox(
                 "Main product category",
                 options=category_options,
@@ -447,7 +484,7 @@ else:
                 )
             )
 
-            
+
             customer_state = st.selectbox(
                 "Customer state",
                 options=state_options,
@@ -459,9 +496,9 @@ else:
 
 
 
-            
 
-            
+
+
 
         submitted = st.form_submit_button("Estimate Risk")
 

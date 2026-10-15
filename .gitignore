@@ -1,11 +1,20 @@
 
+# Python
 __pycache__/
 *.py[cod]
-.venv/
 .ipynb_checkpoints/
-.DS_Store
+
+# Virtual environments
+.venv/
+.venv-test/
+venv/
+
+# Editor and OS files
 .vscode/
+.DS_Store
 
-# Local dataset and database
+# Environment variables
+.env
 
-olist_project.db
+# Backup model artifacts
+late_delivery_model_backup.joblib
