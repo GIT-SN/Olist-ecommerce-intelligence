@@ -6,6 +6,10 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from sklearn.dummy import DummyClassifier
+
+from sklearn.base import clone
+
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -243,21 +247,25 @@ def main():
     ]
 
     categorical_features = [
-        "main_category",
-        "customer_state",
+        "customer_state"
     ]
 
-    feature_cols = numeric_features + categorical_features
+    selected_features = numeric_features + categorical_features
     target_col = "late_delivery"
 
-    X_train = train_df[feature_cols]
+    X_train = train_df[selected_features]
     y_train = train_df[target_col]
 
-    X_val = val_df[feature_cols]
+    X_val = val_df[selected_features]
     y_val = val_df[target_col]
 
-    X_test = test_df[feature_cols]
+    X_test = test_df[selected_features]
     y_test = test_df[target_col]
+
+
+
+
+
 
     numeric_pipeline = Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
@@ -289,6 +297,307 @@ def main():
 
     print("\nTraining Logistic Regression...")
     lr_model.fit(X_train, y_train)
+
+
+    # --------------------------------------------------
+    # 10A. BASELINE COMPARISON
+    # --------------------------------------------------
+
+    from sklearn.dummy import DummyClassifier
+
+    # Baseline 1: Predict the training-set class prevalence
+    dummy_model = DummyClassifier(strategy="prior")
+    dummy_model.fit(X_train, y_train)
+
+    # Baseline 2: Use promised delivery days only
+    promised_days_pipeline = Pipeline([
+        (
+            "preprocessor",
+            ColumnTransformer([
+                (
+                    "numeric",
+                    Pipeline([
+                        ("imputer", SimpleImputer(strategy="median")),
+                        ("scaler", StandardScaler()),
+                    ]),
+                    ["promised_delivery_days"],
+                ),
+            ]),
+        ),
+        (
+            "classifier",
+            LogisticRegression(
+                max_iter=1000,
+                class_weight="balanced",
+                random_state=42,
+            ),
+        ),
+    ])
+
+    promised_days_pipeline.fit(
+        train_df[["promised_delivery_days"]],
+        y_train,
+    )
+
+    baseline_models = {
+        "Dummy prior": dummy_model,
+        "Promised days only": promised_days_pipeline,
+        "Full Logistic Regression": lr_model,
+    }
+
+    print("\nBaseline comparison on validation and test")
+    baseline_results = []
+
+    for name, baseline_model in baseline_models.items():
+        if name == "Dummy prior":
+            val_X = X_val
+            test_X = X_test
+        elif name == "Promised days only":
+            val_X = val_df[["promised_delivery_days"]]
+            test_X = test_df[["promised_delivery_days"]]
+        else:
+            val_X = X_val
+            test_X = X_test
+
+        val_scores = baseline_model.predict_proba(val_X)[:, 1]
+        test_scores = baseline_model.predict_proba(test_X)[:, 1]
+
+        result = {
+            "model": name,
+            "validation_AP": average_precision_score(y_val, val_scores),
+            "validation_ROC_AUC": roc_auc_score(y_val, val_scores),
+            "test_AP": average_precision_score(y_test, test_scores),
+            "test_ROC_AUC": roc_auc_score(y_test, test_scores),
+        }
+
+        baseline_results.append(result)
+
+    baseline_results = pd.DataFrame(baseline_results)
+    print(baseline_results.round(4).to_string(index=False))
+
+
+    # --------------------------------------------------
+    # 10c BOOTSTRAP CONFIDENCE INTERVALS
+    # --------------------------------------------------
+
+    print("\nBootstrapping test metrics (95% confidence intervals)...")
+
+    rng = np.random.default_rng(42)
+    n_bootstrap = 1000
+
+    y_test_array = y_test.to_numpy()
+
+    test_score_map = {
+        "Dummy prior": dummy_model.predict_proba(X_test)[:, 1],
+        "Promised days only": promised_days_pipeline.predict_proba(
+            test_df[["promised_delivery_days"]]
+        )[:, 1],
+        "Full Logistic Regression": lr_model.predict_proba(X_test)[:, 1],
+    }
+
+    bootstrap_metrics = {
+        name: {"ap": [], "auc": []}
+        for name in test_score_map
+    }
+
+    # Paired comparisons use the same sampled test rows
+    delta_ap = []
+    delta_auc = []
+
+    for _ in range(n_bootstrap):
+        indices = rng.integers(
+            0, len(y_test_array), size=len(y_test_array)
+        )
+        y_sample = y_test_array[indices]
+
+        # ROC-AUC is undefined if a bootstrap sample has one class
+        if np.unique(y_sample).size < 2:
+            continue
+
+        sample_scores = {}
+
+        for name, scores in test_score_map.items():
+            sampled_scores = scores[indices]
+            sample_scores[name] = sampled_scores
+
+            bootstrap_metrics[name]["ap"].append(
+                average_precision_score(y_sample, sampled_scores)
+            )
+            bootstrap_metrics[name]["auc"].append(
+                roc_auc_score(y_sample, sampled_scores)
+            )
+
+        delta_ap.append(
+            average_precision_score(
+                y_sample, sample_scores["Full Logistic Regression"]
+            )
+            - average_precision_score(
+                y_sample, sample_scores["Promised days only"]
+            )
+        )
+
+        delta_auc.append(
+            roc_auc_score(
+                y_sample, sample_scores["Full Logistic Regression"]
+            )
+            - roc_auc_score(
+                y_sample, sample_scores["Promised days only"]
+            )
+        )
+
+    def bootstrap_ci(values):
+        return np.percentile(values, [2.5, 97.5])
+
+    print("\nTest metric estimates and bootstrap 95% CIs")
+
+    for name, scores in test_score_map.items():
+        ap_ci = bootstrap_ci(bootstrap_metrics[name]["ap"])
+        auc_ci = bootstrap_ci(bootstrap_metrics[name]["auc"])
+
+        print(
+            f"{name}: "
+            f"AP={average_precision_score(y_test_array, scores):.4f} "
+            f"CI=[{ap_ci[0]:.4f}, {ap_ci[1]:.4f}] | "
+            f"ROC-AUC={roc_auc_score(y_test_array, scores):.4f} "
+            f"CI=[{auc_ci[0]:.4f}, {auc_ci[1]:.4f}]"
+        )
+
+    ap_delta_ci = bootstrap_ci(delta_ap)
+    auc_delta_ci = bootstrap_ci(delta_auc)
+
+    print("\nPaired difference: Full model minus promised-days baseline")
+    print(
+        f"AP difference CI: "
+        f"[{ap_delta_ci[0]:.4f}, {ap_delta_ci[1]:.4f}]"
+    )
+    print(
+        f"ROC-AUC difference CI: "
+        f"[{auc_delta_ci[0]:.4f}, {auc_delta_ci[1]:.4f}]"
+    )
+
+
+    # --------------------------------------------------
+    # 10d EXPANDING-WINDOW TEMPORAL VALIDATION
+    # --------------------------------------------------
+
+
+
+    print("\nExpanding-window temporal validation...")
+
+    # Keep eligible orders in chronological order.
+    # train_df, val_df and test_df were created chronologically.
+    historical_df = (
+    train_df
+    .sort_values("order_purchase_timestamp")
+    .reset_index(drop=True)
+    )
+
+    # Three sequential validation windows.
+    # Each fold trains on earlier data and validates on the next period.
+    n_rows = len(historical_df)
+    initial_train_size = int(n_rows * 0.55)
+    validation_window_size = int(n_rows * 0.15)
+
+    temporal_results = []
+
+    for fold in range(3):
+        train_end = initial_train_size + fold * validation_window_size
+        val_end = train_end + validation_window_size
+
+        fold_train_df = historical_df.iloc[:train_end]
+        fold_val_df = historical_df.iloc[train_end:val_end]
+
+        X_fold_train = fold_train_df[selected_features]
+        y_fold_train = fold_train_df[target_col]
+
+        X_fold_val = fold_val_df[selected_features]
+        y_fold_val = fold_val_df[target_col]
+
+        # Skip a fold if its validation labels contain only one class.
+        if y_fold_val.nunique() < 2:
+            print(f"Fold {fold + 1}: skipped (only one validation class)")
+            continue
+
+        # Clone the pipeline so each fold learns preprocessing
+        # and model parameters only from its own training window.
+        fold_model = clone(lr_model)
+        fold_model.fit(X_fold_train, y_fold_train)
+
+        full_scores = fold_model.predict_proba(X_fold_val)[:, 1]
+
+        # Simple baseline: promised delivery days only.
+        promised_days_model = Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
+            ("classifier", LogisticRegression(
+                max_iter=1000,
+                class_weight="balanced",
+                random_state=42,
+            )),
+        ])
+
+        promised_days_model.fit(
+            fold_train_df[["promised_delivery_days"]],
+            y_fold_train
+        )
+
+        simple_scores = promised_days_model.predict_proba(
+            fold_val_df[["promised_delivery_days"]]
+        )[:, 1]
+
+        temporal_results.append({
+            "fold": fold + 1,
+            "train_rows": len(fold_train_df),
+            "validation_rows": len(fold_val_df),
+            "validation_start": fold_val_df["order_purchase_timestamp"].min(),
+            "validation_end": fold_val_df["order_purchase_timestamp"].max(),
+            "late_rate": y_fold_val.mean(),
+            "full_model_AP": average_precision_score(
+                y_fold_val, full_scores
+            ),
+            "full_model_ROC_AUC": roc_auc_score(
+                y_fold_val, full_scores
+            ),
+            "promised_days_AP": average_precision_score(
+                y_fold_val, simple_scores
+            ),
+            "promised_days_ROC_AUC": roc_auc_score(
+                y_fold_val, simple_scores
+            ),
+        })
+
+    temporal_results_df = pd.DataFrame(temporal_results)
+
+    if not temporal_results_df.empty:
+        print("\nTemporal validation results")
+        display_results = temporal_results_df.copy()
+
+        metric_cols = [
+            "late_rate",
+            "full_model_AP",
+            "full_model_ROC_AUC",
+            "promised_days_AP",
+            "promised_days_ROC_AUC",
+        ]
+
+        display_results[metric_cols] = display_results[metric_cols].round(4)
+
+        print(display_results.to_string(index=False))
+
+        metric_cols = [
+            "full_model_AP",
+            "full_model_ROC_AUC",
+            "promised_days_AP",
+            "promised_days_ROC_AUC",
+        ]
+
+        print("\nMean metrics across temporal folds")
+        print(temporal_results_df[metric_cols].mean().round(4))
+    else:
+        print("No valid temporal folds were available.")
+
+
+
 
     # --------------------------------------------------
     # 11. SELECT THRESHOLD ON VALIDATION DATA
@@ -369,7 +678,7 @@ def main():
     artifact = {
         "model": lr_model,
         "threshold": final_threshold,
-        "feature_columns": feature_cols,
+        "feature_columns": selected_features,
         "numeric_features": numeric_features,
         "categorical_features": categorical_features,
         "target": target_col,

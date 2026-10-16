@@ -10,11 +10,11 @@ import streamlit as st
 # -----------------------------
 st.set_page_config(
     page_title="Olist Delivery Intelligence",
-    page_icon="📦",
+    page_icon="ðŸ“¦",
     layout="wide"
 )
 
-st.title("📦 Olist E-commerce Intelligence")
+st.title("ðŸ“¦ Olist E-commerce Intelligence")
 st.caption("Delivery Performance & Late-Delivery Risk Analysis")
 
 
@@ -256,7 +256,7 @@ if not filtered.empty:
     )
 
     fig.update_layout(xaxis_tickangle=-45)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     fig_volume = px.bar(
         monthly_filtered,
@@ -269,7 +269,7 @@ if not filtered.empty:
         }
     )
 
-    st.plotly_chart(fig_volume, use_container_width=True)
+    st.plotly_chart(fig_volume, width="stretch")
 else:
     st.warning("Select at least one month to display the charts.")
 
@@ -345,7 +345,7 @@ if not category_summary_filtered.empty:
     )
 
     fig_category.update_layout(xaxis_tickangle=-45)
-    st.plotly_chart(fig_category, use_container_width=True)
+    st.plotly_chart(fig_category,width="stretch" )
 
     st.dataframe(
         top_categories[
@@ -356,7 +356,7 @@ if not category_summary_filtered.empty:
                 "late_rate_pct"
             ]
         ],
-        use_container_width=True,
+        width="stretch",
         hide_index=True
     )
 else:
@@ -382,9 +382,10 @@ st.divider()
 st.header("Late-Delivery Risk Predictor")
 
 st.warning(
-    "Experimental model: test Average Precision was 0.1122 "
-    "and recall was 25.6% at the selected threshold. "
+    "Experimental model: test Average Precision was 0.1152 "
+    "and recall was 23.2% at threshold 0.67. "
     "Use this score for demonstration, not operational decisions."
+
 )
 
 if not MODEL_FILE.exists():
@@ -396,15 +397,19 @@ else:
 
     artifact = load_model_artifact(str(MODEL_FILE))
     predictor = artifact["model"]
+
     encoder = (
-        artifact["model"]
+        predictor
         .named_steps["preprocessor"]
         .named_transformers_["categorical"]
         .named_steps["encoder"]
     )
 
-    category_options = sorted(encoder.categories_[0].tolist())
-    state_options = sorted(encoder.categories_[1].tolist())
+    categorical_features = artifact["categorical_features"]
+    state_index = categorical_features.index("customer_state")
+
+    state_options = sorted(encoder.categories_[state_index].tolist())
+
 
 
 
@@ -475,14 +480,6 @@ else:
                 index=5
             )
 
-            main_category = st.selectbox(
-                "Main product category",
-                options=category_options,
-                index=(
-                    category_options.index("unknown")
-                    if "unknown" in category_options else 0
-                )
-            )
 
 
             customer_state = st.selectbox(
@@ -503,6 +500,7 @@ else:
         submitted = st.form_submit_button("Estimate Risk")
 
     if submitted:
+
         input_data = pd.DataFrame([{
             "item_count": item_count,
             "total_price": total_price,
@@ -512,12 +510,21 @@ else:
             "purchase_day_of_week": purchase_day,
             "purchase_month": purchase_month,
             "promised_delivery_days": promised_days,
-            "main_category": main_category,
-            "customer_state": customer_state
+            "customer_state": customer_state,
         }])
+
+        # Match the exact feature columns expected by the saved model.
+        input_data = input_data[artifact["feature_columns"]]
 
         risk_score = predictor.predict_proba(input_data)[0, 1]
         predicted_late = risk_score >= threshold
+
+
+
+
+
+
+
 
         st.subheader("Prediction Result")
         st.metric("Model risk score", f"{risk_score:.1%}")
