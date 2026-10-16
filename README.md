@@ -6,6 +6,10 @@ An end-to-end Data Science project that analyzes e-commerce order and delivery d
 
 **[Open the Streamlit Dashboard](https://olist-ecommerce-intelligence-bfpfawg8pgqylnswgbw69w.streamlit.app/)**
 
+## Dashboard Preview
+
+![Olist E-commerce Intelligence dashboard](assets/dashboard.png)
+
 ## Project Objectives
 
 - Analyze e-commerce order and delivery performance.
