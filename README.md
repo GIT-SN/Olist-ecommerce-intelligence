@@ -4,7 +4,7 @@ An end-to-end Data Science project that analyzes e-commerce order and delivery d
 
 ## Live Dashboard
 
-**[Open the Streamlit Dashboard](https://olist-ecommerce-intelligence-nh7dwm34qmmnsjue5h2cek.streamlit.app/)**
+**[Open the Streamlit Dashboard](https://olist-ecommerce-intelligence-bfpfawg8pgqylnswgbw69w.streamlit.app/)**
 
 ## Project Objectives
 
@@ -31,24 +31,31 @@ The project uses a Logistic Regression classification pipeline with numerical pr
 
 | Metric | Score |
 |---|---:|
-| Average Precision | 0.1122 |
-| ROC-AUC | 0.6583 |
-| Precision | 0.0917 |
-| Recall | 0.2560 |
-| F1-score | 0.1351 |
+| Average Precision (AP) | 0.1152 |
+| ROC-AUC | 0.6697 |
+| Precision | 0.0886 |
+| Recall | 0.2320 |
+| F1-score | 0.1282 |
 | Decision Threshold | 0.67 |
 
-The test set contains approximately **6.61% late deliveries**. The model is experimental: its precision is limited, so its predictions should be treated as risk signals for further investigation rather than definitive delivery forecasts.
+The chronological test set contains **14,471 orders**, with approximately **6.61% late deliveries**.
+
+The model is experimental. At the selected threshold, it identifies some late deliveries but has limited precision, meaning many flagged orders are not actually late.
+
+**Generalization note:** A promised-delivery-days-only baseline outperformed the full model on the final test set, achieving an Average Precision of 0.2680 and ROC-AUC of 0.7845, compared with 0.1152 and 0.6697 for the full model. This suggests that the model's performance may vary across time periods. The cause has not yet been established, so the results should be interpreted cautiously.
+
+Predictions should be treated as risk signals for further investigation, not definitive delivery forecasts.
+
+
 
 ## Project Structure
 
 ```text
-Olist Project/
+Olist-ecommerce-intelligence/
 ├── data/
 │   ├── olist_orders_dataset.csv
 │   ├── olist_order_items_dataset.csv
-│   ├── olist_products_dataset.csv
-│   └── olist_customers_dataset.csv
+│   └── olist_products_dataset.csv
 ├── app.py
 ├── train.py
 ├── Olist_Analysis.ipynb
@@ -58,6 +65,10 @@ Olist Project/
 ├── .gitignore
 └── README.md
 ```
+
+The required dataset files must be placed in the `data/` directory locally before running the project. Files excluded from version control will not appear in the cloned repository.
+
+
 
 ## Getting Started
 
